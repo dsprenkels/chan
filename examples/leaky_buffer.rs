@@ -21,7 +21,7 @@ fn main() {
 
 fn client(free_list: Receiver<Buffer>, server_chan: Sender<Buffer>) {
     loop {
-        let buf;
+        let mut buf = Vec::new();
         chan_select! {
             default => buf = Vec::with_capacity(1024),
             free_list.recv() -> b => buf = b.unwrap(),

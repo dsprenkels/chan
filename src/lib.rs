@@ -1466,64 +1466,161 @@ impl<T: fmt::Debug> fmt::Debug for Inner<T> {
 /// rebind `tick()` to an identifier outside of `chan_select!`.
 #[macro_export]
 macro_rules! chan_select {
-    ($select:ident, default => $default:expr, $(
-        $chan:ident.$meth:ident($($send:expr)*)
-        $(-> $name:pat)* => $code:expr,
-    )+) => {
-        chan_select!(
-            $select,
-            default => $default,
-            $($chan.$meth($($send)*) $(-> $name)* => $code),+);
-    };
-    ($select:ident, default => $default:expr, $(
-        $chan:ident.$meth:ident($($send:expr)*)
-        $(-> $name:pat)* => $code:expr
-    ),+) => {{
-        let mut sel = &mut $select;
-        $(let $chan = sel.$meth(&$chan $(, $send)*);)+
-        let which = sel.try_select();
-        $(if which == Some($chan.id()) {
-            $(let $name = $chan.into_value();)*
-            $code
-        } else)+
-        { $default }
-    }};
-    ($select:ident, $(
-        $chan:ident.$meth:ident($($send:expr)*)
-        $(-> $name:pat)* => $code:expr,
-    )+) => {
-        chan_select!(
-            $select,
-            $($chan.$meth($($send)*) $(-> $name)* => $code),+);
-    };
-    ($select:ident, $(
-        $chan:ident.$meth:ident($($send:expr)*)
-        $(-> $name:pat)* => $code:expr
-    ),+) => {{
-        let mut sel = &mut $select;
-        $(let $chan = sel.$meth(&$chan $(, $send)*);)+
-        let which = sel.select();
-        $(if which == $chan.id() {
-            $(let $name = $chan.into_value();)*
-            $code
-        } else)+
-        { unreachable!() }
-    }};
-    (default => $default:expr) => {{ $default }};
-    (default => $default:expr,) => {{ $default }};
-    ($select:ident, default => $default:expr) => {{ $default }};
-    ($select:ident, default => $default:expr,) => {{ $default }};
-    ($select:ident) => {{
-        let mut sel = &mut $select;
-        sel.select(); // blocks forever
-    }};
-    () => {{
+    ( $( $tt:tt )* ) => {{
         let mut sel = $crate::Select::new();
-        chan_select!(sel);
+        let mut default_present = false;
+        chan_select_inner!( sel, default_present, $( $tt )* );
     }};
-    ($($tt:tt)*) => {{
-        let mut sel = $crate::Select::new();
-        chan_select!(sel, $($tt)*);
+}
+
+/// `chan_select` this macro is one or many that make up the new-generation select mechanism.
+/// This macro will parse the input and pass it on to the underlying select macros.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! chan_select_inner {
+    ( $sel:ident, $default_present:ident,
+      $chan:ident.send($value:expr) => $code:expr ) => {{
+        println!("`send` branch 1 (value: {:?})", $value);
+        let $chan = $sel.send(&$chan, $value);
+        let which = chan_select_do_select!($sel, $default_present);
+        if which == Some($chan.id()) {
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident,
+      $chan:ident.send($value:expr) => $code:expr, ) => {{
+        println!("`send` branch 2 (value: {:?})", $value);
+        let $chan = $sel.send(&$chan, $value);
+        let which = chan_select_do_select!($sel, $default_present);
+        if which == Some($chan.id()) {
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident,
+      $chan:ident.send($value:expr) => $code:expr, $( $rest:tt )*) => {{
+        println!("`send` branch 3 (value: {:?})", $value);
+        let $chan = $sel.send(&$chan, $value);
+        let which = chan_select_inner! { $sel, $default_present, $( $rest )* };
+        if which == Some($chan.id()) {
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident,
+      $chan:ident.recv() => $code:expr ) => {{
+        println!("`recv` branch 1");
+        let $chan = $sel.recv(&$chan);
+        let which = chan_select_do_select!($sel, $default_present);
+        if which == Some($chan.id()) {
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident,
+      $chan:ident.recv() => $code:expr, ) => {{
+        println!("`recv` branch 2 (default: {:?})", $default_present);
+        let $chan = $sel.recv(&$chan);
+        let which = chan_select_do_select!($sel, $default_present);
+        if which == Some($chan.id()) {
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident,
+      $chan:ident.recv() => $code:expr, $( $rest:tt )*) => {{
+        println!("`recv` branch 3");
+        let $chan = $sel.recv(&$chan);
+        let which = chan_select_inner! { $sel, $default_present, $( $rest )* };
+        if which == Some($chan.id()) {
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident,
+      $chan:ident.recv() -> $name:pat => $code:expr ) => {{
+        println!("`recv` branch 4");
+        let $chan = $sel.recv(&$chan);
+        let which = chan_select_do_select!($sel, $default_present);
+        if which == Some($chan.id()) {
+            let $name = $chan.into_value();
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident,
+      $chan:ident.recv() -> $name:pat => $code:expr, ) => {{
+        println!("`recv` branch 5");
+        let $chan = $sel.recv(&$chan);
+        let which = chan_select_do_select!($sel, $default_present);
+        if which == Some($chan.id()) {
+            let $name = $chan.into_value();
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident,
+      $chan:ident.recv() -> $name:pat => $code:expr, $( $rest:tt )*) => {{
+        println!("`recv` branch 6");
+        let $chan = $sel.recv(&$chan);
+        let which = chan_select_inner! { $sel, $default_present, $( $rest )* };
+        if which == Some($chan.id()) {
+            let $name = $chan.into_value();
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident,
+      default => $code:expr ) => {{
+        if $default_present { panic!("only one 'default' arm allowed in `chan_select!(...)`"); }
+        else { $default_present = true; }
+        println!("`default` branch 1");
+        let which = chan_select_do_select!($sel, $default_present);
+        if which.is_none() {
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident,
+      default => $code:expr, ) => {{
+        if $default_present { panic!("only one 'default' arm allowed in `chan_select!(...)`"); }
+        else { $default_present = true; }
+        println!("`default` branch 2");
+        let which = chan_select_do_select!($sel, $default_present);
+        if which.is_none() {
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident,
+      default => $code:expr, $( $rest:tt )*) => {{
+        if $default_present { panic!("only one 'default' arm allowed in `chan_select!(...)`"); }
+        else { $default_present = true; }
+        println!("`default` branch 3");
+        let which = chan_select_inner! { $sel, $default_present, $( $rest )* };
+        if which.is_none() {
+            $code;
+        }
+        which
+    }};
+    ( $sel:ident, $default_present:ident, ) => {{
+        println!("empty macro invocation");
+        // will block forever
+        chan_select_do_select!($sel, $default_present)
+    }};
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! chan_select_do_select {
+    ( $sel:ident, $default_present:ident ) => {{
+        println!("performing select action (default: {:?})", $default_present);
+        if $default_present {
+            $sel.try_select()
+        } else {
+            Some($sel.select())
+        }
     }};
 }
 
