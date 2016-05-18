@@ -1479,7 +1479,6 @@ macro_rules! chan_select {
 macro_rules! chan_select_inner {
     ( $sel:ident, $default_present:expr,
       $chan:ident.send($value:expr) => $code:expr ) => {{
-        println!("`send` branch 1 (value: {:?})", $value);
         let $chan = $sel.send(&$chan, $value);
         let which = chan_select_do_select!($sel, $default_present);
         if which == Some($chan.id()) {
@@ -1489,7 +1488,6 @@ macro_rules! chan_select_inner {
     }};
     ( $sel:ident, $default_present:expr,
       $chan:ident.send($value:expr) => $code:expr, ) => {{
-        println!("`send` branch 2 (value: {:?})", $value);
         let $chan = $sel.send(&$chan, $value);
         let which = chan_select_do_select!($sel, $default_present);
         if which == Some($chan.id()) {
@@ -1499,7 +1497,6 @@ macro_rules! chan_select_inner {
     }};
     ( $sel:ident, $default_present:expr,
       $chan:ident.send($value:expr) => $code:expr, $( $rest:tt )*) => {{
-        println!("`send` branch 3 (value: {:?})", $value);
         let $chan = $sel.send(&$chan, $value);
         let which = chan_select_inner! { $sel, $default_present, $( $rest )* };
         if which == Some($chan.id()) {
@@ -1509,7 +1506,6 @@ macro_rules! chan_select_inner {
     }};
     ( $sel:ident, $default_present:expr,
       $chan:ident.recv() => $code:expr ) => {{
-        println!("`recv` branch 1");
         let $chan = $sel.recv(&$chan);
         let which = chan_select_do_select!($sel, $default_present);
         if which == Some($chan.id()) {
@@ -1519,7 +1515,6 @@ macro_rules! chan_select_inner {
     }};
     ( $sel:ident, $default_present:expr,
       $chan:ident.recv() => $code:expr, ) => {{
-        println!("`recv` branch 2 (default: {:?})", $default_present);
         let $chan = $sel.recv(&$chan);
         let which = chan_select_do_select!($sel, $default_present);
         if which == Some($chan.id()) {
@@ -1529,7 +1524,6 @@ macro_rules! chan_select_inner {
     }};
     ( $sel:ident, $default_present:expr,
       $chan:ident.recv() => $code:expr, $( $rest:tt )*) => {{
-        println!("`recv` branch 3");
         let $chan = $sel.recv(&$chan);
         let which = chan_select_inner! { $sel, $default_present, $( $rest )* };
         if which == Some($chan.id()) {
@@ -1539,7 +1533,6 @@ macro_rules! chan_select_inner {
     }};
     ( $sel:ident, $default_present:expr,
       $chan:ident.recv() -> $name:pat => $code:expr ) => {{
-        println!("`recv` branch 4");
         let $chan = $sel.recv(&$chan);
         let which = chan_select_do_select!($sel, $default_present);
         if which == Some($chan.id()) {
@@ -1550,7 +1543,6 @@ macro_rules! chan_select_inner {
     }};
     ( $sel:ident, $default_present:expr,
       $chan:ident.recv() -> $name:pat => $code:expr, ) => {{
-        println!("`recv` branch 5");
         let $chan = $sel.recv(&$chan);
         let which = chan_select_do_select!($sel, $default_present);
         if which == Some($chan.id()) {
@@ -1561,7 +1553,6 @@ macro_rules! chan_select_inner {
     }};
     ( $sel:ident, $default_present:expr,
       $chan:ident.recv() -> $name:pat => $code:expr, $( $rest:tt )*) => {{
-        println!("`recv` branch 6");
         let $chan = $sel.recv(&$chan);
         let which = chan_select_inner! { $sel, $default_present, $( $rest )* };
         if which == Some($chan.id()) {
@@ -1575,7 +1566,6 @@ macro_rules! chan_select_inner {
         if $default_present {
             panic!("only one `default => {...}` arm allowed in `chan_select!(...)`");
         }
-        println!("`default` branch 1");
         let which = chan_select_do_select!($sel, true);
         if which.is_none() {
             $code;
@@ -1587,7 +1577,6 @@ macro_rules! chan_select_inner {
         if $default_present {
             panic!("only one `default => {...}` arm allowed in `chan_select!(...)`");
         }
-        println!("`default` branch 2");
         let which = chan_select_do_select!($sel, true);
         if which.is_none() {
             $code;
@@ -1599,7 +1588,6 @@ macro_rules! chan_select_inner {
         if $default_present {
             panic!("only one `default => {...}` arm allowed in `chan_select!(...)`");
         }
-        println!("`default` branch 3");
         let which = chan_select_inner! { $sel, true, $( $rest )* };
         if which.is_none() {
             $code;
@@ -1607,7 +1595,6 @@ macro_rules! chan_select_inner {
         which
     }};
     ( $sel:ident, $default_present:expr, ) => {{
-        println!("empty macro invocation");
         // will block forever
         chan_select_do_select!($sel, $default_present)
     }};
@@ -1617,7 +1604,6 @@ macro_rules! chan_select_inner {
 #[macro_export]
 macro_rules! chan_select_do_select {
     ( $sel:ident, $default_present:expr ) => {{
-        println!("performing select action (default: {:?})", $default_present);
         if $default_present {
             $sel.try_select()
         } else {
