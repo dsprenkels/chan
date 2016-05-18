@@ -182,7 +182,7 @@ macro_rules! bench_select_with_init {
                 let mut done = &mut [false, false, false, false];
                 let mut sel = chan::Select::new();
                 loop {
-                    chan_select! {sel,
+                    chan_select_inner! {sel, false,
                         r0.recv() -> d => {
                             if let Some(d) = d {
                                 recv.push(d);
@@ -211,7 +211,7 @@ macro_rules! bench_select_with_init {
                                 done[3] = true;
                             }
                         },
-                    }
+                    };
                     if done.iter().all(|&b| b) {
                         break;
                     }
